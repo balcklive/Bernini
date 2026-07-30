@@ -86,6 +86,8 @@ jobs:
             org.opencontainers.image.licenses=Apache-2.0
 
       # ── 5. Build and push ──────────────────────────────────────────────
+      # Uses the previous GHCR image as cache source: if Dockerfile and
+      # source code haven't changed, the build finishes in seconds.
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
@@ -93,8 +95,9 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # Cache from previous builds to speed up repeated runs
-          cache-from: type=gha
+          cache-from: |
+            type=registry,ref=ghcr.io/${{ github.repository }}:latest
+            type=gha
           cache-to: type=gha,mode=max
           # For CUDA-based images, only linux/amd64 is practical
           platforms: linux/amd64
