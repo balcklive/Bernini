@@ -95,10 +95,13 @@ RUN pip3 install --no-cache-dir \
     imageio \
     imageio-ffmpeg
 
-# 4. FlashAttention-2 (compiled from source against local CUDA)
-#    Set MAX_JOBS to limit parallel nvcc workers (each uses ~3-5 GB RAM).
-#    The pre-built wheel on PyPI is compatible with CUDA 12.6 + torch 2.7.1.
-RUN MAX_JOBS=$(nproc) pip3 install --no-cache-dir flash-attn==2.8.3
+# 4. FlashAttention-2
+#    Use --no-build-isolation so pip's PEP 517 build sandbox can see the
+#    torch that was installed in the previous layer (flash-attn's setup.py
+#    imports torch to query its CUDA architecture flags).
+RUN MAX_JOBS=$(nproc) pip3 install --no-cache-dir \
+    --no-build-isolation \
+    flash-attn==2.8.3
 
 # 5. Open-VeOmni (required, installed with --no-deps to avoid torch override)
 RUN pip3 install --no-cache-dir --no-deps \
