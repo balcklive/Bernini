@@ -43,6 +43,9 @@ pe = ["openai>=1.0"]
 # Gradio demo: powers gradio_demo.py (in-browser UI on top of Bernini).
 demo = ["gradio==6.15.0"]
 
+# REST API server: powers api_server.py (programmatic access).
+api = ["fastapi>=0.115", "uvicorn[standard]>=0.34", "python-multipart>=0.0.18", "requests>=2.32"]
+
 # Multi-GPU sequence parallel (Ulysses) needs Open-VeOmni (Apache-2.0, Py 3.11).
 # Single-GPU inference does NOT need this.
 veomni = ["veomni==0.1.11"]
@@ -54,6 +57,10 @@ veomni = ["veomni==0.1.11"]
 all = [
     "openai>=1.0",
     "gradio==6.15.0",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "python-multipart>=0.0.18",
+    "requests>=2.32",
     "veomni==0.1.11",
 ]
 

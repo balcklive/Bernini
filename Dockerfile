@@ -15,6 +15,10 @@
 #   docker run --gpus all --shm-size=32g bernini:latest \
 #     torchrun --nproc-per-node 8 infer_multi_gpu.py --ulysses 8 \
 #       --config ByteDance/Bernini-Diffusers
+#
+# Run (REST API server on port 8000):
+#   docker run --gpus all -p 8000:8000 bernini:latest \
+#     python api_server.py --config ByteDance/Bernini-Diffusers
 # =============================================================================
 
 # ── Base: CUDA 12.6 (devel for flash-attn compilation) ──────────────────────
@@ -96,10 +100,14 @@ RUN MAX_JOBS=$(nproc) pip3 install --no-cache-dir flash-attn==2.8.3
 RUN pip3 install --no-cache-dir --no-deps \
     git+https://github.com/ByteDance-Seed/VeOmni.git@v0.1.11
 
-# 6. Optional: prompt engineering (OpenAI-compatible endpoint) + Gradio demo
+# 6. Optional: prompt engineering (OpenAI-compatible endpoint) + Gradio demo + API server
 RUN pip3 install --no-cache-dir \
     "openai>=1.0" \
-    "gradio==6.15.0"
+    "gradio==6.15.0" \
+    "fastapi>=0.115" \
+    "uvicorn[standard]>=0.34" \
+    "python-multipart>=0.0.18" \
+    "requests>=2.32"
 
 # ── Copy source code ────────────────────────────────────────────────────────
 COPY . .
