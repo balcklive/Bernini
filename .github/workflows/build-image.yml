@@ -107,7 +107,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GHCR_PAT }}
         run: |
-          PACKAGE="$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          PACKAGE="$(echo '${{ github.event.repository.name }}' | tr '[:upper:]' '[:lower:]')"
           echo "Package: $PACKAGE"
           echo "Fetching versions..."
           VERSIONS="$(
