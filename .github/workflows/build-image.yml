@@ -89,3 +89,39 @@ jobs:
           cache-to: type=gha,mode=max
           # For CUDA-based images, only linux/amd64 is practical
           platforms: linux/amd64
+
+      # ── 6. Clean up old versions, keep only the latest 3 ──────────────
+      # NOTE: GITHUB_TOKEN cannot delete packages (403 error). If you see
+      #       deletion failures, create a classic PAT at:
+      #         https://github.com/settings/tokens
+      #       with scope `delete:packages`, then add it as a repository
+      #       secret named GHCR_PAT and change GH_TOKEN below to use it.
+      - name: Retain latest 3 versions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PACKAGE="$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          echo "Package: $PACKAGE"
+          echo "Fetching versions..."
+          VERSIONS="$(
+            gh api "/user/packages/container/${PACKAGE}/versions" \
+              --jq 'sort_by(.created_at) | reverse | .[].id'
+          )"
+          TOTAL="$(echo "$VERSIONS" | wc -l | xargs)"
+          echo "Total versions: ${TOTAL}"
+          if [ "$TOTAL" -le 3 ]; then
+            echo "3 or fewer versions, nothing to clean up."
+            exit 0
+          fi
+          echo "Keeping the latest 3, deleting the rest..."
+          echo "$VERSIONS" | tail -n +4 | while read -r id; do
+            echo "  Deleting version ${id}..."
+            RESPONSE=$(gh api -X DELETE "/user/packages/container/${PACKAGE}/versions/${id}" --silent 2>&1 || true)
+            if echo "$RESPONSE" | grep -qi "403\|Forbidden"; then
+              echo "  ⚠️  Delete failed (403). GITHUB_TOKEN cannot delete packages."
+              echo "  → Create a PAT at https://github.com/settings/tokens"
+              echo "    with scope 'delete:packages', add as secret GHCR_PAT,"
+              echo "    then change GH_TOKEN to \${{ secrets.GHCR_PAT }}"
+              break
+            fi
+          done
