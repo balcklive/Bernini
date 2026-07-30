@@ -1,20 +1,14 @@
 # =============================================================================
-# Dockerfile.fc3 — Bernini for Alibaba Cloud FC3 (no flash-attn)
+# Dockerfile.fc3 — Bernini for Alibaba Cloud FC3
 # =============================================================================
-# Same as the main Dockerfile but:
-#   - Uses CUDA runtime instead of devel (smaller)
-#   - Skips flash-attn (PyTorch SDPA fallback)
-#   - No ninja-build / uv (not needed without flash-attn compilation)
-#
-# Build:
-#   docker build -t bernini:fc3 -f Dockerfile.fc3 .
+# Same as the main Dockerfile with provenance-compatible build for FC3.
+# flash-attn IS included (required by model code).
 # =============================================================================
 
-# ── Base: CUDA 12.6 runtime (no devel — flash-attn is skipped) ─────────────
-FROM nvidia/cuda:12.6.0-runtime-ubuntu22.04
+FROM nvidia/cuda:12.6.0-devel-ubuntu22.04
 
 LABEL org.opencontainers.image.title="Bernini (FC3)"
-LABEL org.opencontainers.image.description="Bernini — FC3 build without flash-attn"
+LABEL org.opencontainers.image.description="Bernini — FC3 build"
 LABEL org.opencontainers.image.source="https://github.com/balcklive/Bernini"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 
@@ -28,15 +22,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     software-properties-common \
     && add-apt-repository -y ppa:deadsnakes/ppa \
     && apt-get update && apt-get install -y --no-install-recommends \
-    python3.11 \
-    python3.11-dev \
-    python3.11-distutils \
-    python3.11-venv \
-    git \
-    ffmpeg \
-    libsm6 \
-    libxext6 \
-    wget \
+    python3.11 python3.11-dev python3.11-distutils python3.11-venv \
+    git ninja-build \
+    ffmpeg libsm6 libxext6 wget \
     && rm -rf /var/lib/apt/lists/*
 
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
@@ -54,47 +42,34 @@ RUN pip3 install --no-cache-dir \
     torchvision==0.22.1+cu126 \
     --extra-index-url https://download.pytorch.org/whl/cu126
 
-# 2. Core ML dependencies
+# 2. Core ML
 RUN pip3 install --no-cache-dir \
-    diffusers==0.35.2 \
-    accelerate==0.34.2 \
-    transformers==4.57.3 \
-    safetensors \
-    einops \
-    numpy \
-    Pillow \
-    tqdm \
-    ftfy \
-    datasets==2.21.0 \
-    PyYAML \
-    librosa \
-    av
+    diffusers==0.35.2 accelerate==0.34.2 transformers==4.57.3 \
+    safetensors einops numpy Pillow tqdm ftfy \
+    datasets==2.21.0 PyYAML librosa av
 
 # 3. Video / image I/O
 RUN pip3 install --no-cache-dir \
-    decord \
-    imageio \
-    imageio-ffmpeg
+    decord imageio imageio-ffmpeg
 
-# 4. Open-VeOmni (required, installed with --no-deps to avoid torch override)
+# 4. FlashAttention-2 (required by Qwen2.5-VL in model code)
+RUN MAX_JOBS=$(nproc) pip3 install --no-cache-dir \
+    --no-build-isolation flash-attn==2.8.3
+
+# 5. Open-VeOmni
 RUN pip3 install --no-cache-dir --no-deps \
     git+https://github.com/ByteDance-Seed/VeOmni.git@v0.1.11
 
-# 5. Optional: prompt engineering + Gradio demo + API server
+# 6. Gradio + API server
 RUN pip3 install --no-cache-dir \
-    "openai>=1.0" \
-    "gradio==6.15.0" \
-    "fastapi>=0.115" \
-    "uvicorn[standard]>=0.34" \
-    "python-multipart>=0.0.18" \
-    "requests>=2.32"
+    "openai>=1.0" "gradio==6.15.0" \
+    "fastapi>=0.115" "uvicorn[standard]>=0.34" \
+    "python-multipart>=0.0.18" "requests>=2.32"
 
-# ── Copy source code ────────────────────────────────────────────────────────
+# ── Source code ─────────────────────────────────────────────────────────────
 COPY . .
-
 RUN pip3 install --no-cache-dir --no-build-isolation -e . --no-deps
 
-# ── Runtime ─────────────────────────────────────────────────────────────────
 EXPOSE 7860
 
 CMD ["python", "gradio_demo.py", "--config", "/mnt/bernini"]
