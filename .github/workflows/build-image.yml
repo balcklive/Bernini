@@ -91,14 +91,9 @@ jobs:
           platforms: linux/amd64
 
       # ── 6. Clean up old versions, keep only the latest 3 ──────────────
-      # NOTE: GITHUB_TOKEN cannot delete packages (403 error). If you see
-      #       deletion failures, create a classic PAT at:
-      #         https://github.com/settings/tokens
-      #       with scope `delete:packages`, then add it as a repository
-      #       secret named GHCR_PAT and change GH_TOKEN below to use it.
       - name: Retain latest 3 versions
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GHCR_PAT }}
         run: |
           PACKAGE="$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
           echo "Package: $PACKAGE"
