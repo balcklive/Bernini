@@ -32,7 +32,7 @@ on:
 
 jobs:
   build-and-push:
-    name: Build and push image
+    name: Build and push image (full)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -85,13 +85,12 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.licenses=Apache-2.0
 
-      # ── 5. Build and push ──────────────────────────────────────────────
-      # Uses the previous GHCR image as cache source: if Dockerfile and
-      # source code haven't changed, the build finishes in seconds.
+      # ── 5. Build and push (full image, Dockerfile) ─────────────────────
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -99,7 +98,6 @@ jobs:
             type=registry,ref=ghcr.io/${{ github.repository }}:latest
             type=gha
           cache-to: type=gha,mode=max
-          # For CUDA-based images, only linux/amd64 is practical
           platforms: linux/amd64
 
       # ── 6. Clean up old versions, keep only the latest 3 ──────────────
@@ -132,3 +130,53 @@ jobs:
               break
             fi
           done
+
+  # ===========================================================================
+  # FC3 variant — multi-stage build, smaller image (~5GB vs ~10GB)
+  # ===========================================================================
+  build-fc3:
+    name: Build and push image (FC3 slim)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Alibaba Cloud ACR
+        uses: docker/login-action@v3
+        with:
+          registry: crpi-v5j14rjtcacf9f23.cn-shanghai.personal.cr.aliyuncs.com
+          username: ${{ secrets.ALIYUN_ACR_USERNAME }}
+          password: ${{ secrets.ALIYUN_ACR_PASSWORD }}
+
+      - name: Generate FC3 metadata
+        id: meta-fc3
+        uses: docker/metadata-action@v5
+        with:
+          images: crpi-v5j14rjtcacf9f23.cn-shanghai.personal.cr.aliyuncs.com/aliyun_kaka/test
+          tags: |
+            type=raw,value=fc3,enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha,prefix=fc3-,suffix=,format=short
+          labels: |
+            org.opencontainers.image.title=Bernini (FC3)
+            org.opencontainers.image.description=Bernini slim build for Alibaba Cloud FC3
+
+      - name: Build and push FC3 slim image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.fc3
+          push: true
+          tags: ${{ steps.meta-fc3.outputs.tags }}
+          labels: ${{ steps.meta-fc3.outputs.labels }}
+          cache-from: |
+            type=registry,ref=crpi-v5j14rjtcacf9f23.cn-shanghai.personal.cr.aliyuncs.com/aliyun_kaka/test:fc3
+            type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
