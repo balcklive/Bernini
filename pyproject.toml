@@ -79,3 +79,7 @@ explicit = true
 torch = { index = "pytorch-cu126" }
 torchvision = { index = "pytorch-cu126" }
 veomni = { git = "https://github.com/ByteDance-Seed/VeOmni.git", tag = "v0.1.11" }
+
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"

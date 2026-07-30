@@ -120,7 +120,9 @@ RUN pip3 install --no-cache-dir \
 COPY . .
 
 # Install the project package itself (editable not needed in container)
-RUN pip3 install --no-cache-dir -e . --no-deps
+# Use --no-build-isolation so the build sandbox can see already-installed
+# packages (torch, etc.) that the build backend may import.
+RUN pip3 install --no-cache-dir --no-build-isolation -e . --no-deps
 
 # ── Runtime configuration ───────────────────────────────────────────────────
 EXPOSE 7860
