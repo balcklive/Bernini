@@ -1,0 +1,40 @@
+# Version control
+.git/
+.gitignore
+.gitattributes
+
+# Python cache & build
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Local env & secrets
+.env
+*.local
+
+# Generated outputs (runtime dirs, not needed at build time)
+outputs/
+results/
+*.tmp
+
+# Large weight files (should be downloaded at runtime from HuggingFace)
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.ckpt
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Docs (not needed for running)
+docs/
+
+# uv lockfile (not used inside container)
+uv.lock
