@@ -31,7 +31,7 @@ LABEL org.opencontainers.image.licenses="Apache-2.0"
 
 # Suppress interactive prompts during package installation (e.g. tzdata).
 ENV DEBIAN_FRONTEND=noninteractive
-ENV TZ=UTC
+ENV TZ=Asia/Shanghai
 
 SHELL ["/bin/bash", "-c"]
 
