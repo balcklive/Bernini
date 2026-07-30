@@ -29,6 +29,10 @@ LABEL org.opencontainers.image.description="Latent Semantic Planning for Video D
 LABEL org.opencontainers.image.source="https://github.com/balcklive/Bernini"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 
+# Suppress interactive prompts during package installation (e.g. tzdata).
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
 SHELL ["/bin/bash", "-c"]
 
 # ── System dependencies ─────────────────────────────────────────────────────
