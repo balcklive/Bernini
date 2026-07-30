@@ -86,6 +86,9 @@ jobs:
             org.opencontainers.image.licenses=Apache-2.0
 
       # ── 5. Build and push (full image, Dockerfile) ─────────────────────
+      # NOTE: provenance=false is required for FC3 compatibility — newer
+      # Docker/Buildx adds an unknown/unknown platform entry to the manifest
+      # that Alibaba Cloud FC3 cannot parse, causing ImageOptimizingFailed.
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
@@ -94,6 +97,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          provenance: false
           cache-from: |
             type=registry,ref=ghcr.io/${{ github.repository }}:latest
             type=gha
@@ -175,6 +179,7 @@ jobs:
           push: true
           tags: ${{ steps.meta-fc3.outputs.tags }}
           labels: ${{ steps.meta-fc3.outputs.labels }}
+          provenance: false
           cache-from: |
             type=registry,ref=crpi-v5j14rjtcacf9f23.cn-shanghai.personal.cr.aliyuncs.com/aliyun_kaka/test:fc3
             type=gha
