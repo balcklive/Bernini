@@ -1,9 +1,10 @@
 # =============================================================================
-# Dockerfile.fc3 — Bernini for Alibaba Cloud FC3 (slimmer build)
+# Dockerfile.fc3 — Bernini for Alibaba Cloud FC3 (slim, FC3-friendly)
 # =============================================================================
-# Multi-stage build:
-#   1. builder — compile flash-attn (needs CUDA devel)
-#   2. runtime — minimal image (CUDA runtime only)
+# Single-stage build on CUDA runtime (no devel toolchain).
+# flash-attn is SKIPPED — the code falls back to PyTorch SDPA automatically,
+# which saves ~2GB of compilation artifacts and avoids needing the CUDA devel
+# image. The trade-off is minimal performance impact for most use cases.
 #
 # Build:
 #   docker build -t bernini:fc3 -f Dockerfile.fc3 .
@@ -12,37 +13,6 @@
 #   python gradio_demo.py --config /mnt/bernini
 # =============================================================================
 
-# ── Stage 1: Builder (CUDA devel for flash-attn compilation) ────────────────
-FROM nvidia/cuda:12.6.0-devel-ubuntu22.04 AS builder
-
-ENV DEBIAN_FRONTEND=noninteractive
-ENV TZ=Asia/Shanghai
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    software-properties-common \
-    && add-apt-repository -y ppa:deadsnakes/ppa \
-    && apt-get update && apt-get install -y --no-install-recommends \
-    python3.11 python3.11-dev python3.11-distutils python3.11-venv \
-    git ninja-build \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
-RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
-
-RUN python3 -m ensurepip --upgrade && \
-    pip3 install --no-cache-dir --upgrade pip setuptools wheel
-
-# Install PyTorch + torchvision
-RUN pip3 install --no-cache-dir \
-    torch==2.7.1+cu126 \
-    torchvision==0.22.1+cu126 \
-    --extra-index-url https://download.pytorch.org/whl/cu126
-
-# Compile flash-attn
-RUN MAX_JOBS=$(nproc) pip3 install --no-cache-dir \
-    --no-build-isolation flash-attn==2.8.3
-
-# ── Stage 2: Runtime (CUDA runtime only, much smaller) ─────────────────────
 FROM nvidia/cuda:12.6.0-runtime-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -51,22 +21,31 @@ ENV TZ=Asia/Shanghai
 LABEL org.opencontainers.image.title="Bernini (FC3)"
 LABEL org.opencontainers.image.description="Bernini — slim build for Alibaba Cloud FC3"
 
-# Copy Python + installed packages from builder
-COPY --from=builder /usr/bin/python3.11 /usr/bin/python3.11
-COPY --from=builder /usr/lib/python3.11 /usr/lib/python3.11
-COPY --from=builder /usr/local/lib/python3.11 /usr/local/lib/python3.11
-COPY --from=builder /usr/local/bin /usr/local/bin
-
-# Make python3.11 the default
-RUN ln -sf /usr/bin/python3.11 /usr/bin/python && \
-    ln -sf /usr/bin/python3.11 /usr/bin/python3
-
-# Install runtime system deps (no build tools needed)
+# ── System dependencies ─────────────────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg libsm6 libxext6 wget ca-certificates \
+    software-properties-common \
+    && add-apt-repository -y ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 python3.11-dev python3.11-distutils python3.11-venv \
+    git ffmpeg libsm6 libxext6 wget ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install remaining Python deps (smaller ones, no compilation needed)
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1 && \
+    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
+
+RUN python3 -m ensurepip --upgrade && \
+    pip3 install --no-cache-dir --upgrade pip setuptools wheel
+
+# ── Python dependencies (no flash-attn — uses PyTorch SDPA fallback) ────────
+WORKDIR /app
+
+# 1. PyTorch + CUDA 12.6
+RUN pip3 install --no-cache-dir \
+    torch==2.7.1+cu126 \
+    torchvision==0.22.1+cu126 \
+    --extra-index-url https://download.pytorch.org/whl/cu126
+
+# 2. Core ML + video I/O + misc
 RUN pip3 install --no-cache-dir \
     diffusers==0.35.2 \
     accelerate==0.34.2 \
@@ -77,17 +56,19 @@ RUN pip3 install --no-cache-dir \
     "openai>=1.0" \
     --extra-index-url https://download.pytorch.org/whl/cu126
 
-# Install veomni
+# 3. Open-VeOmni (required, --no-deps to avoid torch override)
 RUN pip3 install --no-cache-dir --no-deps \
     git+https://github.com/ByteDance-Seed/VeOmni.git@v0.1.11
 
-# Copy source code
-WORKDIR /app
+# ── Copy source code ────────────────────────────────────────────────────────
 COPY . .
 
-# Install project package
+# Install the project package
+# Note: flash-attn listed in requirements.txt is ignored here — the code
+# auto-detects its absence and falls back to PyTorch SDPA.
 RUN pip3 install --no-build-isolation -e . --no-deps
 
+# ── Runtime ─────────────────────────────────────────────────────────────────
 EXPOSE 7860
 
 CMD ["python", "gradio_demo.py", "--config", "/mnt/bernini"]
