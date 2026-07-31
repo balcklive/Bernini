@@ -55,8 +55,8 @@ from bernini.cli import (
     DEFAULT_NEG_PROMPT,
     GUIDANCE_MODES,
     build_pipeline,
-    resolve_system_prompt,
 )
+from bernini.prompt_enhancer import get_system_prompt_for_task
 from bernini.pipeline import BerniniPipeline
 
 logger = logging.getLogger("bernini.api")
@@ -391,10 +391,8 @@ async def generate(req: GenerateRequest):
 
     # ── Prompt enhancement ──────────────────────────────────────────────
     prompt = req.prompt
-    system_prompt = resolve_system_prompt(
-        {"task_type": task_type},
-        argparse.Namespace(system_prompt=""),
-    )
+    # Auto-select the system prompt from the task type (no CLI override in API).
+    system_prompt = get_system_prompt_for_task(task_type)
 
     if req.use_pe and REWRITER is not None:
         pe_model = req.pe_model or ARGS.pe_model if ARGS else None
