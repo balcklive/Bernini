@@ -31,24 +31,39 @@ _BACKEND = None
 _flash_varlen = None
 
 
+def _gpu_supports_flash_attn() -> bool:
+    """FlashAttention requires Ampere (SM 80) or newer GPUs."""
+    if not torch.cuda.is_available():
+        return False
+    try:
+        major, _ = torch.cuda.get_device_capability(0)
+        return major >= 8
+    except Exception:
+        return False
+
+
 def _select_backend():
     global _BACKEND, _flash_varlen
     if _BACKEND is not None:
         return
-    try:
-        from flash_attn_interface import flash_attn_varlen_func  # FA3
+    # FA3 / FA2 only run on Ampere (SM 80+) GPUs. On older cards (e.g. Turing
+    # T4) fall through to the PyTorch SDPA backend instead of crashing at the
+    # first flash_attn_varlen_func call.
+    if _gpu_supports_flash_attn():
+        try:
+            from flash_attn_interface import flash_attn_varlen_func  # FA3
 
-        _flash_varlen, _BACKEND = flash_attn_varlen_func, "fa3"
-        return
-    except Exception:
-        pass
-    try:
-        from flash_attn import flash_attn_varlen_func  # FA2
+            _flash_varlen, _BACKEND = flash_attn_varlen_func, "fa3"
+            return
+        except Exception:
+            pass
+        try:
+            from flash_attn import flash_attn_varlen_func  # FA2
 
-        _flash_varlen, _BACKEND = flash_attn_varlen_func, "fa2"
-        return
-    except Exception:
-        pass
+            _flash_varlen, _BACKEND = flash_attn_varlen_func, "fa2"
+            return
+        except Exception:
+            pass
     _BACKEND = "sdpa"
 
 
