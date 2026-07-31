@@ -634,8 +634,10 @@ def main():
         "Starting API server on http://%s:%s  (docs at http://%s:%s/docs)",
         args.host, args.port, args.host, args.port,
     )
+    # Pass the app object directly (not a string import path) so uvicorn
+    # does NOT respawn a subprocess that would lose the loaded PIPELINE.
     uvicorn.run(
-        "api_server:app",
+        app,
         host=args.host,
         port=args.port,
         log_level="info",
