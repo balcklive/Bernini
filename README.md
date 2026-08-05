@@ -1,197 +1,170 @@
-<div align="center">
+# Bernini 容器化部署与使用指南
 
-<img src="assets/bernini-icon.png" width="560" alt="Bernini"/>
+> 本项目是 [ByteDance/Bernini](https://github.com/bytedance/Bernini)（Latent Semantic Planning for Video Diffusion）的容器化部署分支。通过 GitHub Actions 自动构建并推送 Docker 镜像（GHCR + 阿里云 ACR），可直接用于本地 GPU 服务器或阿里云 FC3（函数计算）部署。
 
-<h4 align="center">Latent Semantic Planning for Video Diffusion</h4>
+## 目录
 
-**Chenchen Liu<sup>\*</sup>, Junyi Chen<sup>\*</sup>, Lei Li<sup>\*</sup>, Lu Chi<sup>\*,§</sup>, Mingzhen Sun<sup>\*</sup>, Zhuoying Li<sup>\*</sup>, Yi Fu, Ruoyu Guo, Yiheng Wu, Ge Bai, Zehuan Yuan<sup>✉</sup>**
+- [镜像地址](#镜像地址)
+- [启动服务](#启动服务)
+- [API 使用说明](#api-使用说明)
+- [FC3 部署](#fc3-部署)
+- [GPU 与显存约束](#gpu-与显存约束)
 
-<sup>\*</sup> Equal contribution&nbsp;&nbsp;<sup>✉</sup> Corresponding author&nbsp;&nbsp;<sup>§</sup> Project lead
+---
 
-[![arXiv](https://img.shields.io/badge/arXiv-2605.22344-b31b1b.svg)](https://arxiv.org/abs/2605.22344)
-[![Project Page](https://img.shields.io/badge/Project-Page-blue.svg)](https://bernini-ai.github.io/)
-[![HuggingFace](https://img.shields.io/badge/%F0%9F%A4%97%20HuggingFace-Models-yellow)](https://huggingface.co/collections/ByteDance/bernini)
+## 镜像地址
 
-</div>
+| 镜像 | 说明 | 构建文件 |
+|---|---|---|
+| `ghcr.io/balcklive/bernini:latest` | 完整版镜像（含 flash-attn，约 10GB） | `Dockerfile` |
+| `crpi-v5j14rjtcacf9f23.cn-shanghai.personal.cr.aliyuncs.com/aliyun_kaka/test:latest` | 完整版镜像（阿里云 ACR 上海） | `Dockerfile` |
+| `crpi-v5j14rjtcacf9f23.cn-shanghai.personal.cr.aliyuncs.com/aliyun_kaka/test:fc3` | FC3 精简版（含 flash-attn） | `Dockerfile.fc3` |
 
-## 🎉 News
+代码推送到 `main` 分支后，GitHub Actions 自动构建并推送上述镜像（同时保留最新 3 个版本，自动清理旧版本）。
 
-- **[2026-07-13]** We released the training code of the Bernini Renderer (**Bernini-R**). See [docs/bernini_r_train.md](docs/bernini_r_train.md) for the full training guide.
-- **[2026-06-11]** We open-sourced the inference code and model weights of the full Bernini (**Bernini**) on [ByteDance/Bernini-Diffusers](https://huggingface.co/ByteDance/Bernini-Diffusers).
-- **[2026-06-09]** We open-sourced the **1.3B** weights of the Bernini Renderer (**Bernini-R**) on [ByteDance/Bernini-R-1.3B-Diffusers](https://huggingface.co/ByteDance/Bernini-R-1.3B-Diffusers). Fine-tuned from Wan2.1-1.3B, the model performs close to the 14B variant on simple tasks such as style transfer, subtitle or watermark removal, and local editing, while lagging behind on more complex tasks such as human generation.
-- **[2026-06-01]** We open-sourced the inference code and model weights of the Bernini Renderer (**Bernini-R**) on [ByteDance/Bernini-R-Diffusers](https://huggingface.co/ByteDance/Bernini-R-Diffusers).
-- **[2026-05-22]** We released our paper [Bernini: Latent Semantic Planning for Video Diffusion](https://arxiv.org/abs/2605.22344).
+---
 
-## ✨ Highlights
+## 启动服务
 
-Bernini is a unified framework for video generation and editing that combines
-an MLLM-based semantic planner with a DiT-based renderer.
+容器默认命令是 Gradio Web UI；可通过覆写命令切换为 FastAPI 服务或命令行推理。`--config` 参数指向模型权重目录：本地部署用挂载卷（如 `/models`），FC3 用内置路径 `/mnt/bernini`。
 
-On video editing, Bernini reaches the first tier among leading closed-source
-commercial models. The leaderboard below comes from our self-built arena
-platform, where human annotators blindly vote on paired edits and the votes are
-aggregated into a Bradley-Terry score and a pairwise win-rate matrix.
-
-<img src="assets/arena.png" width="900" alt="Video editing arena: Bradley-Terry leaderboard and pairwise win-rate matrix"/>
-
-Benchmark results across the released models:
-
-| Model | EditVerse | OpenVE | OpenS2V | VBench | Bernini-v2v (OS) | Bernini-rv2v (OS) |
-|---|---|---|---|---|---|---|
-| [Bernini-R 1.3B](https://huggingface.co/ByteDance/Bernini-R-1.3B-Diffusers) | 7.74 | 3.65 | 62.18 | 84.69 | 3.15 | 3.21 |
-| [Bernini-R 14B](https://huggingface.co/ByteDance/Bernini-R-Diffusers) | 7.99 | 3.78 | 62.94 | 84.64 | 3.25 | 3.34 |
-| [Bernini 7B+14B](https://huggingface.co/ByteDance/Bernini-Diffusers) | 8.02 | 4.03 | 62.30 | 84.37 | 3.49 | 3.48 |
-
-## 🧾 Models
-
-The repository provides two model families. Pick one and follow its guide for
-weight download, inference commands, and ready-to-run scripts:
-
-|  | **Bernini** | **Bernini-R** |
-|--|-------------|---------------|
-| What it is | Full pipeline: MLLM-based semantic planner + DiT-based renderer | Renderer-only model fine-tuned from the Wan diffusion renderer |
-| Strengths | Decomposes complex instructions and plans semantic changes before rendering; stronger instruction following | Strong rendering and consistency with fewer moving parts; simpler setup |
-| Checkpoints | [`ByteDance/Bernini-Diffusers`](https://huggingface.co/ByteDance/Bernini-Diffusers) | [`ByteDance/Bernini-R-Diffusers`](https://huggingface.co/ByteDance/Bernini-R-Diffusers) (14B) · [`ByteDance/Bernini-R-1.3B-Diffusers`](https://huggingface.co/ByteDance/Bernini-R-1.3B-Diffusers) · [`ByteDance/Bernini-R`](https://huggingface.co/ByteDance/Bernini-R) (separate ckpts) |
-| Guide | **[docs/bernini.md](docs/bernini.md)** | **[docs/bernini_r.md](docs/bernini_r.md)** |
-
-Both families share the same task interface: `t2i`, `i2i`, `t2v`, `v2v`,
-`rv2v`, and `r2v`.
-
-## 📦 Installation
-
-### Requirements
-
-- **Python** 3.11.2.
-- **CUDA GPU** — a Hopper GPU (H100/H800/H200) is recommended so FlashAttention-3
-  can be used; other CUDA GPUs fall back to FlashAttention-2 or PyTorch SDPA.
-- **CUDA toolkit** 12.6 (matches the pinned `torch==2.7.1+cu126`; 12.3+ is the
-  minimum if you build FlashAttention-3).
-- Pinned in `requirements.txt`: `torch==2.7.1+cu126`, `diffusers==0.35.2`,
-  `accelerate==0.34.2`, `transformers==4.57.3`.
-
-Reference environment (developed and tested on this setup):
-
-| Component | Version      |
-|-----------|--------------|
-| GPU       | NVIDIA H100  |
-| CUDA      | 12.6         |
-| Python    | 3.11.2       |
-| PyTorch   | 2.7.1+cu126  |
-
-### Install (Inference)
+### 1. Gradio Web UI（默认入口）
 
 ```bash
-git clone https://github.com/bytedance/Bernini.git bernini && cd bernini
-pip install -r requirements.txt
-# Open-VeOmni is required. Install it with --no-deps so it does not pull in a
-# different torch build and override the pinned torch==2.7.1+cu126:
-pip install --no-deps git+https://github.com/ByteDance-Seed/VeOmni.git@v0.1.11
+docker run --gpus all -p 7860:7860 \
+  -v /mnt/test:/models \
+  ghcr.io/balcklive/bernini:latest \
+  python gradio_demo.py --config /models
 ```
 
-[Open-VeOmni](https://github.com/ByteDance-Seed/VeOmni) (Apache-2.0,
-Python 3.11) is a **required** dependency — all inference paths import it,
-including single-GPU.
+浏览器访问 `http://<服务器IP>:7860`。任务类型下拉框（t2i / i2i / t2v / v2v / rv2v / r2v 等）自动填充 `guidance_mode`，支持上传媒体文件，结果内联展示。
 
-### Install (Training)
-
-For training, we recommend using [uv](https://docs.astral.sh/uv/) to manage the
-Python environment. The `pyproject.toml` declares all training dependencies and
-routes `torch` / `torchvision` to the correct CUDA index automatically.
+### 2. FastAPI REST API 服务（推荐用于程序调用）
 
 ```bash
-# Install uv (if not yet installed)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Create .venv and install all dependencies
-uv sync
-uv sync --extra all
-# flash-attn requires --no-build-isolation
-uv pip install --no-build-isolation "flash-attn==2.8.3"
+docker run --gpus all -p 7860:7860 \
+  -v /mnt/test:/models \
+  ghcr.io/balcklive/bernini:latest \
+  python api_server.py --config /models --port 7860
 ```
 
-`uv sync` automatically creates and uses `.venv`. You can either activate it
-with `source .venv/bin/activate`, or run commands inside it via `uv run <cmd>`.
-See [docs/bernini_r_train.md](docs/bernini_r_train.md) for the full training
-guide.
+启动后：
 
-Optional extras:
+- 健康检查：`GET /v1/health`
+- Swagger 文档：`http://<服务器IP>:7860/docs`
 
-- **Faster attention** (FlashAttention-2 by default):
-  - FlashAttention-2 — general CUDA GPUs (incl. A100/A800): `pip install flash-attn==2.8.3`.
-  - FlashAttention-3 — Hopper only (H100/H800/H200, CUDA ≥ 12.3, PyTorch ≥ 2.4).
-    `flash_attn_interface` is not on PyPI; build it from the
-    [flash-attention](https://github.com/Dao-AILab/flash-attention) repo's
-    `hopper/` directory at tag `v2.8.3`:
-    ```bash
-    git clone https://github.com/Dao-AILab/flash-attention.git
-    cd flash-attention && git checkout v2.8.3
-    cd hopper && MAX_JOBS=$(nproc) python3 setup.py install --user
-    ```
-
-## 🚀 Usage
-
-Weight download and per-task inference commands are model-specific — follow
-**[docs/bernini.md](docs/bernini.md)** or
-**[docs/bernini_r.md](docs/bernini_r.md)**. The pieces below are shared by both
-pipelines.
-
-### Case files
-
-A run is described by a **case file** — a small JSON under
-[`assets/testcases/`](assets/testcases/) that bundles one task's routing and
-inputs (`task_type`, `guidance_mode`, `prompt`, source media, `output`). This
-keeps long prompts out of the command line. Each task has a directory under
-`assets/testcases/` with one or more bundled examples; see the
-[case-file format](assets/testcases/README.md).
-
-### Prompt enhancer (highly recommended)
-
-`--use_pe` enhances the prompt through an OpenAI-compatible endpoint and is
-recommended for best generation quality. The `openai` SDK is installed by
-`requirements.txt`; configure the endpoint with environment variables:
+### 3. 命令行推理
 
 ```bash
-export BERNINI_PE_API_KEY=...      # or OPENAI_API_KEY
-export BERNINI_PE_BASE_URL=...     # or OPENAI_BASE_URL
-export BERNINI_PE_MODEL=...        # vision-capable chat model
+docker run --gpus all --rm \
+  -v /mnt/test:/models \
+  ghcr.io/balcklive/bernini:latest \
+  python infer_single_gpu.py --config /models \
+    --task_type t2v --prompt "一只猫在公园散步"
 ```
 
-### Gradio demo
+完整 Bernini 的更多用法（case 文件、guidance_mode、prompt enhancer 等）参见上游文档 `docs/bernini.md`。
 
-`gradio_demo.py` exposes the same pipeline through a Gradio UI for both
-**Bernini** and **Bernini-R**: the task-type dropdown auto-fills
-`guidance_mode` (still user-editable), uploaded media is routed to the matching
-slot, and the result is rendered inline. Launch commands are in each model's
-guide ([Bernini](docs/bernini.md#gradio-demo) ·
-[Bernini-R](docs/bernini_r.md#gradio-demo)).
+---
 
-Add `--use_pe` (with the prompt-enhancer environment variables above) to enable
-prompt enhancement; the in-UI checkbox is a per-request switch on top of this
-flag.
+## API 使用说明
 
-## 📑 Citation
+| 端点 | 方法 | 说明 |
+|---|---|---|
+| `/v1/health` | GET | 健康检查 |
+| `/v1/tasks` | GET | 任务类型与 guidance mode 列表 |
+| `/v1/generate` | POST | 生成（JSON，媒体支持 base64 / URL / 路径） |
+| `/v1/generate/upload` | POST | 生成（multipart 文件上传） |
+| `/v1/output/{file}` | GET | 下载生成结果 |
 
-If you use Bernini in your research, please cite:
+### 文生视频
 
-```bibtex
-@article{bernini,
-  title   = {Bernini: Latent Semantic Planning for Video Diffusion},
-  author  = {Chenchen Liu and Junyi Chen and Lei Li and Lu Chi and Mingzhen Sun and Zhuoying Li and Yi Fu and Ruoyu Guo and Yiheng Wu and Ge Bai and Zehuan Yuan},
-  journal = {arXiv preprint arXiv:2605.22344},
-  year    = {2026}
-}
+```bash
+curl -X POST http://<服务器IP>:7860/v1/generate \
+  -H "Content-Type: application/json" \
+  -d '{"task_type": "t2v", "prompt": "A cat walking in the park", "num_frames": 33}' \
+  | jq .output_url
 ```
 
-## 🙏 Acknowledgements
+### 视频编辑（multipart 上传文件）
 
-Bernini builds on several outstanding open-source projects:
+> 注意：Windows/WSL 终端 shell 用 GBK 编码发送中文会乱码，请把中文写入 UTF-8 文件后以文件方式引用。
 
-- [Wan2.2-T2V-A14B](https://huggingface.co/Wan-AI/Wan2.2-T2V-A14B)
-- [Qwen2.5-VL-7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct)
-- [VeOmni](https://github.com/ByteDance-Seed/VeOmni)
+```bash
+printf '去除所有的字幕' > /tmp/prompt.txt
 
-We thank the authors and communities of these projects for their contributions.
+curl -X POST http://<服务器IP>:7860/v1/generate/upload \
+  -F "task_type=v2v" \
+  -F "prompt=</tmp/prompt.txt" \
+  -F "num_frames=17" \
+  -F "video=@sample.mp4" \
+  | jq .output_url
+```
 
-## 📄 License
+生成成功后，`output_url` 形如 `/v1/output/<文件名>`，拼接服务地址即可下载：
 
-Apache License 2.0. See [LICENSE](LICENSE).
+```bash
+curl -o result.mp4 http://<服务器IP>:7860/v1/output/<文件名>
+```
+
+### 可调参数
+
+`task_type`、`prompt`、`neg_prompt`、`guidance_mode`、`num_frames`、`num_inference_steps`、`max_image_size`、`height`、`width`、`flow_shift`、`seed`、`fps`、`use_pe` 等。请求时省略的字段使用任务类型对应的默认值。
+
+---
+
+## FC3 部署
+
+镜像与 FC3 函数必须位于**同一地域**（本项目均为上海 cn-shanghai）。在 FC3 控制台创建自定义容器函数，使用镜像：
+
+```
+crpi-v5j14rjtcacf9f23.cn-shanghai.personal.cr.aliyuncs.com/aliyun_kaka/test:fc3
+```
+
+entrypoint 命令（`--port 7860` 必须与 `customContainerConfig.port` 一致）：
+
+```
+python api_server.py --config /mnt/bernini --port 7860
+```
+
+通过 FC3 HTTP 触发器对外暴露 API，地址形如 `*.fcapp.run`。注意：
+
+- 浏览器直接访问 FC3 默认域名会触发下载（阿里云强制 `Content-Disposition: attachment`），程序/curl 调用不受影响；如需浏览器访问请配置自定义域名（CNAME 绑定）。
+- 中文提示词请用 UTF-8 文件方式传入（同上）。
+
+---
+
+## GPU 与显存约束
+
+FC3 当前可用的 GPU 类型（上海地域）：
+
+| GPU 类型 | 架构 | 显存 | flash-attn | 备注 |
+|---|---|---|---|---|
+| `fc.gpu.tesla.1` | Turing (T4) | 16GB | ❌ 自动降级 SDPA | 配额充足，但仅支持低帧数短视频 |
+| `fc.gpu.ampere.1` | Ampere (A10) | 16GB | ✅ | 需确认配额 |
+| `fc.gpu.ada.2` | Ada (L20) | 24GB | ✅ | 配额少（按量 1 卡），易满 |
+
+**T4（fc.gpu.tesla.1）实测显存约束：**
+
+| 参数 | 结果 |
+|---|---|
+| 81 帧 + 默认分辨率 | ❌ OOM（需 ~199GB） |
+| 33 帧 | ❌ OOM（需 ~36GB） |
+| **17 帧 + 512 分辨率 + SDPA** | ✅ 成功（~15 分钟） |
+| t2i 文生图（1 帧） | ✅ 成功（~200 秒） |
+
+需要更高质量视频时，建议换 `fc.gpu.ampere.1` 或 `fc.gpu.ada.2`，或用 ECI 部署到更大显存 GPU。
+
+> T4 上使用完整 Bernini（Qwen planner 路径直接调用 `flash_attn_func`）仍需处理，建议视频编辑用 T4 + SDPA 时选择渲染器模型或降低分辨率/帧数。
+
+---
+
+## 其他说明
+
+- 完整镜像约 10GB（CUDA devel + flash-attn），跨云推送约需 1 小时；未改动时利用 registry 缓存可秒级重建。
+- 模型代码**强制要求** flash-attn，两个 Dockerfile 均保留，不能为省体积删除。
+- 本部署分支为 API/容器化场景优化，原版论文、模型对比、训练等完整文档见上游 [ByteDance/Bernini](https://github.com/bytedance/Bernini)。
+
+## License
+
+Apache License 2.0。详见 [LICENSE](LICENSE)。
