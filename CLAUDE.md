@@ -24,10 +24,11 @@
 ```
 
 关键文件：
-- `Dockerfile` — 完整版镜像（含 flash-attn，约 10GB）
-- `Dockerfile.fc3` — FC3 版（含 flash-attn，devel 基础镜像）
-- `.github/workflows/build-image.yml` — 双 job 并行构建
+- `Dockerfile` — 唯一镜像（含 flash-attn，约 10GB），同时推送 GHCR / 阿里云 ACR / 火山 VCR
+- `.github/workflows/build-image.yml` — 单 job 三仓库并行推送
 - `api_server.py` — FastAPI REST API 服务
+
+> `Dockerfile.fc3` 已废弃（与完整版几乎无差别，仅少了 uv），不再构建推送。
 
 ---
 
@@ -39,10 +40,13 @@ ghcr.io/balcklive/bernini:latest
 
 # 阿里云 ACR（上海，DevPod/FC3 用）
 crpi-v5j14rjtcacf9f23.cn-shanghai.personal.cr.aliyuncs.com/aliyun_kaka/test:latest
-crpi-v5j14rjtcacf9f23.cn-shanghai.personal.cr.aliyuncs.com/aliyun_kaka/test:fc3
+
+# 火山引擎 VCR（北京）
+fm-qc-prj-images-cn-beijing.cr.volces.com/gpu-infer/bernini:latest
 ```
 
 注意：**FC3 函数与 ACR 必须在同一地域**（本项目均为上海 cn-shanghai）。
+原 `:fc3` 标签已停止推送，FC3 函数应改用 `:latest`（镜像内容与 FC3 版基本一致）。
 
 ---
 
@@ -280,8 +284,8 @@ FC3 当前可用的 GPU 类型（上海地域）：
 
 ## 其他要点
 
-- **GitHub Actions 密钥**：`GHCR_PAT`（delete:packages 权限）、`ALIYUN_ACR_USERNAME`、`ALIYUN_ACR_PASSWORD`
-- **GHCR 版本清理**：workflow 内置"保留最新 3 个版本"清理步骤，需 GHCR_PAT 才有删除权限
+- **GitHub Actions 密钥**：`GHCR_PAT`（delete:packages 权限）、`ALIYUN_ACR_USERNAME`、`ALIYUN_ACR_PASSWORD`、`VOLCANO_CR_USERNAME`、`VOLCANO_CR_PASSWORD`（火山 VCR 密码在控制台「镜像仓库 → 访问凭证」生成）
+- **GHCR 版本清理**：workflow 内置"保留最新 3 个版本"清理步骤，需 GHCR_PAT 才有删除权限（ACR/火山无自动清理，需各自控制台手动清）
 - **镜像缓存**：workflow 用 `cache-from: type=registry` 加速增量构建，未改动时秒级完成
 - **镜像体积**：完整镜像约 10GB（CUDA devel + flash-attn），跨云推送约需 1 小时
 - **ACR 触发器**（镜像构建后通知部署）与**构建规则**（从 GitHub 拉代码构建）是两个功能，注意区分
